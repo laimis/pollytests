@@ -5,7 +5,7 @@ using Polly.RateLimit;
 
 internal class RateLimitParty
 {
-    private static Policy _policy = Policy.RateLimit(10, TimeSpan.FromSeconds(1), maxBurst: 10);
+    private static Policy _rateLimit = Policy.RateLimit(10, TimeSpan.FromSeconds(1), maxBurst: 10);
 
     private static Policy _retryPolicy = 
         Policy.Handle<RateLimitRejectedException>().RetryForever(onRetry: ex => 
@@ -17,6 +17,8 @@ internal class RateLimitParty
             Thread.Sleep(sleepDuration);
         });
 
+    private static Policy _wrapped = Policy.Wrap(_retryPolicy, _rateLimit);
+
     internal static void RunAsync()
     {
         try
@@ -25,7 +27,7 @@ internal class RateLimitParty
             {
                 var number = i;
 
-                _policy.Execute(() =>
+                _rateLimit.Execute(() =>
                 {
                     System.Console.WriteLine($"Starting {number}");
                 });
@@ -36,18 +38,33 @@ internal class RateLimitParty
             System.Console.WriteLine($"Rate limit exceeded: {ex.Message}");
         }
 
-        // now let's try with retry
+        Console.WriteLine("This time, we will add forever retry, press enter to continue...");
+        Console.ReadLine();
 
+        // now let's try with retry
         for (int i = 0; i < 100; i++)
         {
             var number = i;
 
             _retryPolicy.Execute(() =>
             {
-                _policy.Execute(() =>
+                _rateLimit.Execute(() =>
                 {
                     System.Console.WriteLine($"Starting {number}");
                 });
+            });
+        }
+
+        Console.WriteLine("Lastly, the same thing, but using wrapped policy, press enter to continue...");
+        Console.ReadLine();
+
+        for (int i = 0; i < 100; i++)
+        {
+            var number = i;
+
+            _wrapped.Execute(() =>
+            {
+                System.Console.WriteLine($"Starting {number}");
             });
         }
     }
